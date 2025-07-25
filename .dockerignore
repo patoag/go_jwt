@@ -1,0 +1,41 @@
+# Archivos de Git
+.git
+.gitignore
+
+# Archivos de documentación
+README.md
+*.md
+
+# Archivos de configuración local
+.env
+.env.local
+
+# Archivos de IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+
+# Archivos temporales
+tmp/
+temp/
+
+# Logs
+*.log
+
+# Archivos de test
+test-api.sh
+
+# Archivos de desarrollo
+Makefile
+
+# Archivos de backup
+backups/
+
+# Binarios locales
+main
+*.exe

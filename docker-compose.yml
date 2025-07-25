@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  # Base de datos PostgreSQL
+  postgres:
+    image: postgres:15-alpine
+    container_name: go-jwt-postgres
+    environment:
+      POSTGRES_DB: go_jwt_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - go-jwt-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Aplicación Go
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: go-jwt-app
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres123
+      - DB_NAME=go_jwt_db
+      - JWT_SECRET=mi-super-secreto-jwt-key-2024
+      - PORT=8080
+      - GIN_MODE=debug
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - go-jwt-network
+    volumes:
+      - .:/app
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  go-jwt-network:
+    driver: bridge
