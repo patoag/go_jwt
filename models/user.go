@@ -73,6 +73,12 @@ func (u *User) ToResponse() UserResponse {
 	}
 }
 
+// ChangePasswordRequest representa la solicitud para cambiar la contraseña
+type ChangePasswordRequest struct {
+	ContraseñaActual string `json:"contraseña_actual" validate:"required"`
+	NuevaContraseña  string `json:"nueva_contraseña" validate:"required,min=6"`
+}
+
 // PaginatedUsersResponse representa una respuesta paginada de usuarios
 type PaginatedUsersResponse struct {
 	Users      []UserResponse `json:"users"`
