@@ -1,271 +1,220 @@
-# Backend RESTful en Go con JWT
+# Go JWT Backend
 
-Un backend robusto y seguro desarrollado en Go que proporciona gestión completa de usuarios con autenticación JWT, autorización basada en roles y operaciones CRUD completas.
+API REST de autenticación y gestión de usuarios construida con Go, diseñada como boilerplate profesional para backends con JWT.
 
-## 🚀 Características
+## Stack
 
-### Funcionalidades Principales
-- **Gestión Completa de Usuarios (CRUD)**
-  - Registro de usuarios con validación
-  - Inicio de sesión con JWT
-  - Obtener y actualizar perfil de usuario
-  - Eliminación de cuenta
-  - Operaciones de administrador (listar usuarios, obtener por ID)
+- **Go 1.23** + **Gin** + **GORM**
+- **PostgreSQL** - Base de datos principal
+- **Redis** - Token blacklist + Rate limiting
+- **Docker Compose** - Orquestación de servicios
+- **Swagger UI** - Documentación interactiva
 
-### Seguridad
-- **Autenticación JWT** con expiración configurable
-- **Hashing de contraseñas** con bcrypt
-- **Autorización basada en roles** (user/admin)
-- **Validación robusta** de entrada de datos
-- **Middleware de seguridad** CORS y rate limiting
-- **Manejo consistente de errores** con códigos HTTP apropiados
+## Quick Start
 
-### Tecnologías
-- **Go 1.21** - Lenguaje de programación
-- **Gin Gonic** - Framework web de alto rendimiento
-- **GORM** - ORM para Go
-- **PostgreSQL** - Base de datos
-- **JWT** - Autenticación basada en tokens
-- **Docker & Docker Compose** - Contenedorización
-
-## 📋 Requisitos
-
-- Docker y Docker Compose instalados
-- Puerto 8080 y 5432 disponibles
-
-## 🛠️ Instalación y Configuración
-
-### 1. Clonar el repositorio
 ```bash
+# Clonar e iniciar
 git clone <repository-url>
-cd go-jwt-backend
-```
+cd go-jwt
 
-### 2. Configurar variables de entorno
-```bash
-cp .env.example .env
-# Editar .env con tus configuraciones si es necesario
-```
+# Levantar todos los servicios
+make up
 
-### 3. Iniciar con Docker Compose
-```bash
-# Construir e iniciar todos los servicios
-docker-compose up --build
-
-# O en modo detached (segundo plano)
-docker-compose up -d --build
-```
-
-### 4. Verificar que el servidor esté funcionando
-```bash
+# Verificar
 curl http://localhost:8080/api/v1/health
 ```
 
-## 📚 Documentación de la API
+La API estará disponible en `http://localhost:8080` y Swagger UI en `http://localhost:8080/swagger/index.html`.
 
-### Base URL
-```
-http://localhost:8080/api/v1
-```
+**Admin por defecto:** `admin@example.com` / `admin123`
 
-### Autenticación
-La API utiliza JWT Bearer tokens. Incluye el token en el header Authorization:
+## Arquitectura
+
 ```
-Authorization: Bearer <tu-jwt-token>
+Request → Router → Middleware (CORS, RateLimit, Auth) → Handler → Service → Repository → DB/Redis
 ```
 
-## 🔐 Endpoints de Autenticación
-
-### 1. Registrar Usuario
-```bash
-curl -X POST http://localhost:8080/api/v1/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "usuario@ejemplo.com",
-    "nombre_de_usuario": "miusuario",
-    "contraseña": "micontraseña123"
-  }'
 ```
-
-**Respuesta exitosa (201):**
-```json
-{
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "user": {
-    "id": "123e4567-e89b-12d3-a456-426614174000",
-    "email": "usuario@ejemplo.com",
-    "nombre_de_usuario": "miusuario",
-    "rol": "user",
-    "fecha_creacion": "2024-01-15T10:30:00Z",
-    "fecha_actualizacion": "2024-01-15T10:30:00Z"
-  }
-}
-```
-
-### 2. Iniciar Sesión
-```bash
-curl -X POST http://localhost:8080/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "usuario@ejemplo.com",
-    "contraseña": "micontraseña123"
-  }'
-```
-
-### 3. Renovar Token
-```bash
-curl -X POST http://localhost:8080/api/v1/auth/refresh \
-  -H "Authorization: Bearer <tu-token-actual>"
-```
-
-## 👤 Endpoints de Usuario
-
-### 1. Obtener Perfil
-```bash
-curl -X GET http://localhost:8080/api/v1/users/profile \
-  -H "Authorization: Bearer <tu-token>"
-```
-
-### 2. Actualizar Perfil
-```bash
-curl -X PUT http://localhost:8080/api/v1/users/profile \
-  -H "Authorization: Bearer <tu-token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "nuevo@ejemplo.com",
-    "nombre_de_usuario": "nuevousuario"
-  }'
-```
-
-### 3. Eliminar Cuenta
-```bash
-curl -X DELETE http://localhost:8080/api/v1/users/profile \
-  -H "Authorization: Bearer <tu-token>"
-```
-
-## 👑 Endpoints de Administrador
-
-### 1. Listar Usuarios (con paginación)
-```bash
-curl -X GET "http://localhost:8080/api/v1/admin/users?page=1&page_size=10" \
-  -H "Authorization: Bearer <token-admin>"
-```
-
-**Respuesta:**
-```json
-{
-  "users": [...],
-  "total": 25,
-  "page": 1,
-  "page_size": 10,
-  "total_pages": 3
-}
-```
-
-### 2. Obtener Usuario por ID
-```bash
-curl -X GET http://localhost:8080/api/v1/admin/users/123e4567-e89b-12d3-a456-426614174000 \
-  -H "Authorization: Bearer <token-admin>"
-```
-
-## 🗄️ Modelo de Datos
-
-### Usuario
-```json
-{
-  "id": "UUID",
-  "email": "string (único, requerido)",
-  "nombre_de_usuario": "string (único, requerido, 3-50 chars)",
-  "rol": "string (user|admin, default: user)",
-  "fecha_creacion": "timestamp",
-  "fecha_actualizacion": "timestamp"
-}
-```
-
-## ⚠️ Códigos de Error
-
-- **400 Bad Request** - Datos inválidos o errores de validación
-- **401 Unauthorized** - Token faltante, inválido o expirado
-- **403 Forbidden** - Permisos insuficientes
-- **404 Not Found** - Recurso no encontrado
-- **409 Conflict** - Email o nombre de usuario ya existe
-- **500 Internal Server Error** - Error interno del servidor
-
-## 🔧 Desarrollo
-
-### Estructura del Proyecto
-```
-go-jwt-backend/
-├── config/          # Configuración de base de datos
-├── handlers/        # Controladores HTTP
-├── middleware/      # Middleware de autenticación y autorización
-├── models/          # Modelos de datos
-├── utils/           # Utilidades (JWT, validación, respuestas)
-├── main.go          # Punto de entrada de la aplicación
+go-jwt/
+├── main.go                    # Entry point, router, graceful shutdown
+├── config/
+│   ├── config.go              # Configuración centralizada (env vars)
+│   ├── database.go            # Conexión PostgreSQL + migraciones
+│   └── redis.go               # Conexión Redis
+├── models/
+│   └── user.go                # Modelo User + DTOs
+├── repositories/
+│   ├── user_repository.go     # Persistencia de usuarios (GORM)
+│   └── redis_blacklist.go     # Token blacklist (Redis)
+├── services/
+│   ├── interfaces.go          # Interfaces para DI
+│   ├── errors.go              # Errores de dominio
+│   ├── auth_service.go        # Lógica de autenticación
+│   └── user_service.go        # Lógica de usuarios
+├── handlers/
+│   ├── auth.go                # Handlers de auth (register, login, logout, etc.)
+│   └── user.go                # Handlers de usuarios (profile, CRUD)
+├── middleware/
+│   └── auth.go                # Auth, Admin, CORS, RateLimit, Logger
+├── utils/
+│   ├── auth.go                # JWT, bcrypt
+│   ├── validation.go          # Validadores
+│   └── response.go            # Helpers de respuesta
+├── docs/                      # Swagger (generado)
 ├── docker-compose.yml
 ├── Dockerfile
-└── README.md
+├── Makefile
+├── test-api.sh
+└── .env.example
 ```
 
-### Usuario Administrador por Defecto
-Al iniciar la aplicación, se crea automáticamente un usuario administrador:
-- **Email:** admin@example.com
-- **Contraseña:** admin123
-- **Rol:** admin
+## Endpoints
 
-### Comandos Útiles
+| Método | Ruta | Auth | Descripción |
+|--------|------|------|-------------|
+| `POST` | `/api/v1/auth/register` | No | Registrar usuario |
+| `POST` | `/api/v1/auth/login` | No | Iniciar sesión |
+| `POST` | `/api/v1/auth/refresh` | Bearer | Renovar token |
+| `POST` | `/api/v1/auth/logout` | Bearer | Cerrar sesión (blacklist token) |
+| `POST` | `/api/v1/auth/change-password` | Bearer | Cambiar contraseña |
+| `GET` | `/api/v1/users/profile` | Bearer | Obtener perfil |
+| `PUT` | `/api/v1/users/profile` | Bearer | Actualizar perfil |
+| `DELETE` | `/api/v1/users/profile` | Bearer | Eliminar cuenta |
+| `GET` | `/api/v1/admin/users` | Admin | Listar usuarios (paginado) |
+| `GET` | `/api/v1/admin/users/:id` | Admin | Obtener usuario por ID |
+| `GET` | `/api/v1/health` | No | Health check (DB + Redis) |
+| `GET` | `/swagger/*` | No | Swagger UI |
+
+## Comandos
 
 ```bash
-# Ver logs de la aplicación
-docker-compose logs -f app
-
-# Ver logs de PostgreSQL
-docker-compose logs -f postgres
-
-# Reiniciar solo la aplicación
-docker-compose restart app
-
-# Detener todos los servicios
-docker-compose down
-
-# Detener y eliminar volúmenes (¡cuidado! elimina datos de BD)
-docker-compose down -v
+make up             # Iniciar servicios (Docker)
+make down           # Detener servicios
+make logs           # Ver logs de la app
+make test           # Ejecutar todos los tests
+make test-unit      # Tests unitarios
+make test-api       # Tests de integración
+make test-coverage  # Tests con cobertura
+make health         # Health check
+make shell          # Shell del contenedor
+make db-shell       # Shell de PostgreSQL
+make swagger        # Regenerar docs Swagger
 ```
 
-## 🧪 Testing
+## Variables de Entorno
 
-Para probar la API, puedes usar el script de ejemplo incluido:
+| Variable | Default | Descripción |
+|----------|---------|-------------|
+| `DB_HOST` | `localhost` | Host de PostgreSQL |
+| `DB_PORT` | `5432` | Puerto de PostgreSQL |
+| `DB_USER` | `postgres` | Usuario de PostgreSQL |
+| `DB_PASSWORD` | `postgres123` | Password de PostgreSQL |
+| `DB_NAME` | `go_jwt_db` | Nombre de la base de datos |
+| `REDIS_HOST` | `localhost` | Host de Redis |
+| `REDIS_PORT` | `6379` | Puerto de Redis |
+| `REDIS_PASSWORD` | `` | Password de Redis |
+| `REDIS_DB` | `0` | Base de datos de Redis |
+| `JWT_SECRET` | `...desarrollo` | Secret para firmar JWT |
+| `JWT_EXPIRATION_HOURS` | `24` | Horas de expiración del JWT |
+| `PORT` | `8080` | Puerto del servidor |
+| `GIN_MODE` | `debug` | Modo de Gin (`debug`/`release`) |
+| `CORS_ALLOWED_ORIGINS` | `*` | Orígenes CORS (separados por coma) |
+| `RATE_LIMIT_REQUESTS` | `100` | Requests por ventana |
+| `RATE_LIMIT_WINDOW` | `60` | Ventana en segundos |
+
+## Testing
 
 ```bash
-# Hacer el script ejecutable
-chmod +x test-api.sh
+# Tests unitarios (utils, services, middleware)
+make test-unit
 
-# Ejecutar tests básicos
-./test-api.sh
+# Tests de integración via curl (requiere servicios levantados)
+make test-api
+
+# Cobertura
+make test-coverage
 ```
 
-## 🚀 Despliegue en Producción
+## Seguridad
 
-### Variables de Entorno Importantes
+- Passwords hasheados con **bcrypt**
+- JWT firmado con **HS256**, expiración configurable
+- **Token blacklist** en Redis para logout real
+- **Rate limiting** con Redis sliding window por IP (fail-open)
+- **CORS** configurable por orígenes
+- IDs son **UUID v4**
+- Roles: `user` (default) y `admin`
+
+## Despliegue
+
+### Requisitos previos
+
+- **Docker** y **Docker Compose** instalados
+- Acceso a un servidor con puertos 8080, 5432 y 6379 disponibles (o configurar los que se deseen)
+
+### Despliegue con Docker Compose
+
 ```bash
-# Cambiar a modo producción
+# 1. Clonar el repositorio
+git clone <repository-url>
+cd go-jwt
+
+# 2. Crear archivo .env basado en el ejemplo
+cp .env.example .env
+
+# 3. Editar .env con valores de producción (ver sección siguiente)
+nano .env
+
+# 4. Levantar todos los servicios
+make up
+
+# 5. Verificar que todo está corriendo
+make health
+```
+
+### Variables críticas para producción
+
+Estas variables **deben** cambiarse respecto a los valores por defecto:
+
+```bash
+# Seguridad
 GIN_MODE=release
+JWT_SECRET=<secret-aleatorio-de-al-menos-32-caracteres>
+DB_PASSWORD=<password-seguro-de-postgresql>
 
-# Usar un JWT secret más seguro
-JWT_SECRET=tu-super-secreto-jwt-muy-largo-y-aleatorio
+# CORS - restringir a los dominios permitidos
+CORS_ALLOWED_ORIGINS=https://tudominio.com,https://app.tudominio.com
 
-# Configurar base de datos de producción
-DB_HOST=tu-host-de-produccion
-DB_PASSWORD=contraseña-segura
+# Rate limiting - ajustar según tráfico esperado
+RATE_LIMIT_REQUESTS=60
+RATE_LIMIT_WINDOW=60
 ```
 
-### Consideraciones de Seguridad
-1. Cambiar el JWT_SECRET por uno más seguro
-2. Usar HTTPS en producción
-3. Configurar rate limiting apropiado
-4. Implementar logging y monitoreo
-5. Usar variables de entorno para configuración sensible
+### Despliegue del binario (sin Docker)
 
-## 📄 Licencia
+```bash
+# 1. Compilar el binario
+CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o server .
 
-Este proyecto está bajo la Licencia MIT.
+# 2. Copiar al servidor el binario y la carpeta docs/
+scp server docs/ usuario@servidor:/opt/go-jwt/
+
+# 3. En el servidor, configurar variables de entorno y ejecutar
+export DB_HOST=<host-postgresql>
+export REDIS_HOST=<host-redis>
+export JWT_SECRET=<secret-seguro>
+export GIN_MODE=release
+./server
+```
+
+### Notas de producción
+
+- El servidor implementa **graceful shutdown** (señales SIGINT/SIGTERM), lo que permite reiniciar sin perder requests en curso
+- Redis opera en modo **fail-open**: si Redis no está disponible, el rate limiting y la blacklist de tokens se desactivan, pero la API sigue funcionando
+- El health check (`GET /api/v1/health`) retorna `503` si la base de datos o Redis están caídos, útil para load balancers
+- Se recomienda colocar un reverse proxy (nginx, Caddy) delante para TLS y servir en puerto 443
+- El admin por defecto (`admin@example.com` / `admin123`) se crea automáticamente al iniciar; cambiar la contraseña inmediatamente en producción
+
+## Licencia
+
+MIT

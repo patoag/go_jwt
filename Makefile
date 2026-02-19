@@ -1,125 +1,120 @@
 # Makefile para Go JWT Backend
 
-.PHONY: help build up down logs test clean restart
+.PHONY: help build up down logs test test-unit test-api test-coverage clean restart swagger
 
 # Variables
 DOCKER_COMPOSE = docker-compose
 APP_NAME = go-jwt-backend
 
-# Ayuda por defecto
 help:
-	@echo "🚀 Go JWT Backend - Comandos disponibles:"
+	@echo "Go JWT Backend - Comandos disponibles:"
 	@echo ""
-	@echo "  build     - Construir las imágenes Docker"
-	@echo "  up        - Iniciar todos los servicios"
-	@echo "  down      - Detener todos los servicios"
-	@echo "  restart   - Reiniciar todos los servicios"
-	@echo "  logs      - Ver logs de la aplicación"
-	@echo "  logs-db   - Ver logs de PostgreSQL"
-	@echo "  test      - Ejecutar pruebas de la API"
-	@echo "  clean     - Limpiar contenedores y volúmenes"
-	@echo "  shell     - Acceder al shell del contenedor de la app"
-	@echo "  db-shell  - Acceder al shell de PostgreSQL"
+	@echo "  build          - Construir las imagenes Docker"
+	@echo "  up             - Iniciar todos los servicios"
+	@echo "  up-fg          - Iniciar servicios en primer plano"
+	@echo "  down           - Detener todos los servicios"
+	@echo "  restart        - Reiniciar todos los servicios"
+	@echo "  logs           - Ver logs de la aplicacion"
+	@echo "  logs-db        - Ver logs de PostgreSQL"
+	@echo "  logs-redis     - Ver logs de Redis"
+	@echo "  test           - Ejecutar todos los tests (unit + API)"
+	@echo "  test-unit      - Ejecutar tests unitarios"
+	@echo "  test-api       - Ejecutar tests de integracion (requiere servicios)"
+	@echo "  test-coverage  - Tests con reporte de cobertura"
+	@echo "  swagger        - Generar documentacion Swagger"
+	@echo "  clean          - Limpiar contenedores y volumenes"
+	@echo "  shell          - Acceder al shell del contenedor"
+	@echo "  db-shell       - Acceder a PostgreSQL"
+	@echo "  health         - Health check del servidor"
 	@echo ""
 
-# Construir imágenes
 build:
-	@echo "🔨 Construyendo imágenes Docker..."
+	@echo "Construyendo imagenes Docker..."
 	$(DOCKER_COMPOSE) build
 
-# Iniciar servicios
 up:
-	@echo "🚀 Iniciando servicios..."
+	@echo "Iniciando servicios..."
 	$(DOCKER_COMPOSE) up -d --build
-	@echo "✅ Servicios iniciados!"
-	@echo "📡 API disponible en: http://localhost:8080"
-	@echo "🏥 Health check: http://localhost:8080/api/v1/health"
+	@echo "Servicios iniciados!"
+	@echo "API disponible en: http://localhost:8080"
+	@echo "Swagger UI: http://localhost:8080/swagger/index.html"
+	@echo "Health check: http://localhost:8080/api/v1/health"
 
-# Iniciar servicios en primer plano
 up-fg:
-	@echo "🚀 Iniciando servicios en primer plano..."
+	@echo "Iniciando servicios en primer plano..."
 	$(DOCKER_COMPOSE) up --build
 
-# Detener servicios
 down:
-	@echo "🛑 Deteniendo servicios..."
+	@echo "Deteniendo servicios..."
 	$(DOCKER_COMPOSE) down
 
-# Reiniciar servicios
 restart:
-	@echo "🔄 Reiniciando servicios..."
+	@echo "Reiniciando servicios..."
 	$(DOCKER_COMPOSE) restart
 
-# Ver logs de la aplicación
 logs:
-	@echo "📋 Logs de la aplicación:"
 	$(DOCKER_COMPOSE) logs -f app
 
-# Ver logs de PostgreSQL
 logs-db:
-	@echo "📋 Logs de PostgreSQL:"
 	$(DOCKER_COMPOSE) logs -f postgres
 
-# Ejecutar pruebas
-test:
-	@echo "🧪 Ejecutando pruebas de la API..."
+logs-redis:
+	$(DOCKER_COMPOSE) logs -f redis
+
+test: test-unit test-api
+
+test-unit:
+	@echo "Ejecutando tests unitarios..."
+	docker run --rm -v $(PWD):/app -w /app golang:1.23-alpine sh -c "apk add --no-cache git && go test ./utils/... ./services/... ./middleware/... -v -count=1"
+
+test-api:
+	@echo "Ejecutando tests de integracion..."
 	@chmod +x test-api.sh
 	@./test-api.sh
 
-# Limpiar todo (¡CUIDADO! Elimina datos)
+test-coverage:
+	@echo "Ejecutando tests con cobertura..."
+	docker run --rm -v $(PWD):/app -w /app golang:1.23-alpine sh -c "apk add --no-cache git && go test ./utils/... ./services/... ./middleware/... -coverprofile=coverage.out -v && go tool cover -func=coverage.out"
+
+swagger:
+	@echo "Generando documentacion Swagger..."
+	swag init
+
 clean:
-	@echo "🧹 Limpiando contenedores y volúmenes..."
+	@echo "Limpiando contenedores y volumenes..."
 	$(DOCKER_COMPOSE) down -v --remove-orphans
 	@docker system prune -f
 
-# Acceder al shell del contenedor de la app
 shell:
-	@echo "🐚 Accediendo al shell del contenedor..."
 	$(DOCKER_COMPOSE) exec app sh
 
-# Acceder al shell de PostgreSQL
 db-shell:
-	@echo "🐚 Accediendo a PostgreSQL..."
 	$(DOCKER_COMPOSE) exec postgres psql -U postgres -d go_jwt_db
 
-# Ver estado de los servicios
 status:
-	@echo "📊 Estado de los servicios:"
 	$(DOCKER_COMPOSE) ps
 
-# Verificar que la API esté funcionando
 health:
-	@echo "🏥 Verificando health check..."
-	@curl -s http://localhost:8080/api/v1/health | python3 -m json.tool 2>/dev/null || echo "❌ API no disponible"
+	@curl -s http://localhost:8080/api/v1/health | python3 -m json.tool 2>/dev/null || echo "API no disponible"
 
-# Desarrollo: reiniciar solo la app
 dev-restart:
-	@echo "🔄 Reiniciando solo la aplicación..."
 	$(DOCKER_COMPOSE) restart app
 
-# Ver logs en tiempo real
-dev-logs:
-	@echo "📋 Logs en tiempo real:"
-	$(DOCKER_COMPOSE) logs -f
-
-# Backup de la base de datos
 backup:
-	@echo "💾 Creando backup de la base de datos..."
 	@mkdir -p backups
 	$(DOCKER_COMPOSE) exec postgres pg_dump -U postgres go_jwt_db > backups/backup_$(shell date +%Y%m%d_%H%M%S).sql
-	@echo "✅ Backup creado en backups/"
+	@echo "Backup creado en backups/"
 
-# Restaurar backup (usar con: make restore BACKUP=archivo.sql)
 restore:
-	@echo "📥 Restaurando backup: $(BACKUP)"
-	@if [ -z "$(BACKUP)" ]; then echo "❌ Especifica el archivo: make restore BACKUP=archivo.sql"; exit 1; fi
+	@if [ -z "$(BACKUP)" ]; then echo "Especifica el archivo: make restore BACKUP=archivo.sql"; exit 1; fi
 	$(DOCKER_COMPOSE) exec -T postgres psql -U postgres go_jwt_db < $(BACKUP)
 
-# Información del proyecto
 info:
-	@echo "ℹ️  Información del proyecto:"
+	@echo "Informacion del proyecto:"
 	@echo "  Nombre: $(APP_NAME)"
 	@echo "  Puerto API: 8080"
 	@echo "  Puerto DB: 5432"
+	@echo "  Puerto Redis: 6379"
 	@echo "  Base de datos: go_jwt_db"
 	@echo "  Usuario admin: admin@example.com / admin123"
+	@echo "  Swagger: http://localhost:8080/swagger/index.html"

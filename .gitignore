@@ -19,6 +19,13 @@ vendor/
 .env
 .env.local
 
+# Configuraciones de IA
+CLAUDE.md
+.claude/
+.cursorrules
+.cursor/
+.github/copilot-instructions.md
+
 # Archivos de IDE
 .vscode/
 .idea/
@@ -44,3 +51,7 @@ temp/
 
 # Archivos de Docker
 .dockerignore
+
+# Coverage
+coverage.out
+coverage.html
