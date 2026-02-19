@@ -1,19 +1,25 @@
 package middleware
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"net/http"
+	"strconv"
+	"strings"
+	"time"
 
+	"go-jwt-backend/services"
 	"go-jwt-backend/utils"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 )
 
-// AuthMiddleware verifica que el usuario esté autenticado
-func AuthMiddleware() gin.HandlerFunc {
+// AuthMiddleware verifica que el usuario esté autenticado y que el token no esté blacklisted
+func AuthMiddleware(jwtSecret string, authService *services.AuthService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Obtener el token del header Authorization
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{
@@ -24,7 +30,6 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// Extraer el token del header
 		token := utils.ExtractTokenFromHeader(authHeader)
 		if token == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{
@@ -35,8 +40,7 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// Validar el token
-		claims, err := utils.ValidateJWT(token)
+		claims, err := utils.ValidateJWTWithSecret(token, jwtSecret)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"error":   "Token inválido",
@@ -46,7 +50,22 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// Guardar la información del usuario en el contexto
+		// Verificar blacklist
+		if authService != nil {
+			blacklisted, err := authService.IsTokenBlacklisted(token)
+			if err != nil {
+				log.Printf("Error verificando blacklist: %v", err)
+			}
+			if blacklisted {
+				c.JSON(http.StatusUnauthorized, gin.H{
+					"error":   "Token inválido",
+					"message": "El token ha sido revocado",
+				})
+				c.Abort()
+				return
+			}
+		}
+
 		c.Set("user_id", claims.UserID)
 		c.Set("user_email", claims.Email)
 		c.Set("user_role", claims.Rol)
@@ -58,7 +77,6 @@ func AuthMiddleware() gin.HandlerFunc {
 // AdminMiddleware verifica que el usuario tenga rol de administrador
 func AdminMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Verificar que el usuario esté autenticado primero
 		userRole, exists := c.Get("user_role")
 		if !exists {
 			c.JSON(http.StatusUnauthorized, gin.H{
@@ -69,7 +87,6 @@ func AdminMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// Verificar que el rol sea admin
 		if userRole != "admin" {
 			c.JSON(http.StatusForbidden, gin.H{
 				"error":   "Acceso denegado",
@@ -83,10 +100,23 @@ func AdminMiddleware() gin.HandlerFunc {
 	}
 }
 
-// CORSMiddleware maneja las políticas CORS
-func CORSMiddleware() gin.HandlerFunc {
+// CORSMiddleware maneja las políticas CORS con orígenes configurables
+func CORSMiddleware(allowedOrigins []string) gin.HandlerFunc {
+	allowAll := len(allowedOrigins) == 1 && allowedOrigins[0] == "*"
+	originsMap := make(map[string]bool)
+	for _, origin := range allowedOrigins {
+		originsMap[strings.TrimSpace(origin)] = true
+	}
+
 	return func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
+		origin := c.Request.Header.Get("Origin")
+
+		if allowAll {
+			c.Header("Access-Control-Allow-Origin", "*")
+		} else if originsMap[origin] {
+			c.Header("Access-Control-Allow-Origin", origin)
+		}
+
 		c.Header("Access-Control-Allow-Credentials", "true")
 		c.Header("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
 		c.Header("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE, PATCH")
@@ -100,16 +130,79 @@ func CORSMiddleware() gin.HandlerFunc {
 	}
 }
 
+// RateLimitMiddleware implementa rate limiting con Redis sliding window por IP
+func RateLimitMiddleware(redisClient *redis.Client, maxRequests int, window time.Duration) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Fail-open si Redis no está disponible
+		if redisClient == nil {
+			c.Next()
+			return
+		}
+
+		ip := c.ClientIP()
+		key := fmt.Sprintf("ratelimit:%s", ip)
+		now := time.Now().UnixMilli()
+		windowMs := window.Milliseconds()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		member := fmt.Sprintf("%d:%d", now, time.Now().UnixNano())
+
+		pipe := redisClient.Pipeline()
+
+		// Eliminar entradas fuera de la ventana
+		pipe.ZRemRangeByScore(ctx, key, "0", strconv.FormatInt(now-windowMs, 10))
+		// Contar requests en la ventana
+		countCmd := pipe.ZCard(ctx, key)
+		// Agregar request actual con miembro único
+		pipe.ZAdd(ctx, key, redis.Z{Score: float64(now), Member: member})
+		// Renovar TTL
+		pipe.Expire(ctx, key, window)
+
+		_, err := pipe.Exec(ctx)
+		if err != nil {
+			// Fail-open: si Redis falla, dejar pasar
+			log.Printf("Error en rate limiting: %v", err)
+			c.Next()
+			return
+		}
+
+		count := countCmd.Val()
+
+		// Agregar headers informativos
+		c.Header("X-RateLimit-Limit", strconv.Itoa(maxRequests))
+		remaining := maxRequests - int(count) - 1
+		if remaining < 0 {
+			remaining = 0
+		}
+		c.Header("X-RateLimit-Remaining", strconv.Itoa(remaining))
+
+		if int(count) >= maxRequests {
+			retryAfter := int(window.Seconds())
+			c.Header("Retry-After", strconv.Itoa(retryAfter))
+			c.JSON(http.StatusTooManyRequests, gin.H{
+				"error":   "Demasiadas solicitudes",
+				"message": fmt.Sprintf("Límite de %d solicitudes por %v excedido. Intente nuevamente más tarde.", maxRequests, window),
+			})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}
+
 // GetUserIDFromContext obtiene el ID del usuario desde el contexto
 func GetUserIDFromContext(c *gin.Context) (uuid.UUID, error) {
 	userID, exists := c.Get("user_id")
 	if !exists {
-		return uuid.Nil, gin.Error{Err: gin.Error{}.Err, Type: gin.ErrorTypePublic}
+		return uuid.Nil, fmt.Errorf("user_id no encontrado en el contexto")
 	}
 
 	id, ok := userID.(uuid.UUID)
 	if !ok {
-		return uuid.Nil, gin.Error{Err: gin.Error{}.Err, Type: gin.ErrorTypePublic}
+		return uuid.Nil, fmt.Errorf("user_id no es un UUID válido")
 	}
 
 	return id, nil
@@ -119,12 +212,12 @@ func GetUserIDFromContext(c *gin.Context) (uuid.UUID, error) {
 func GetUserRoleFromContext(c *gin.Context) (string, error) {
 	userRole, exists := c.Get("user_role")
 	if !exists {
-		return "", gin.Error{Err: gin.Error{}.Err, Type: gin.ErrorTypePublic}
+		return "", fmt.Errorf("user_role no encontrado en el contexto")
 	}
 
 	role, ok := userRole.(string)
 	if !ok {
-		return "", gin.Error{Err: gin.Error{}.Err, Type: gin.ErrorTypePublic}
+		return "", fmt.Errorf("user_role no es un string válido")
 	}
 
 	return role, nil
@@ -145,15 +238,4 @@ func LoggerMiddleware() gin.HandlerFunc {
 			param.ErrorMessage,
 		)
 	})
-}
-
-// RateLimitMiddleware implementa un rate limiting básico
-func RateLimitMiddleware() gin.HandlerFunc {
-	// En un entorno de producción, usarías Redis o similar para el rate limiting
-	// Por simplicidad, aquí implementamos un rate limiting básico en memoria
-	return func(c *gin.Context) {
-		// Por ahora, solo pasamos el request
-		// En producción implementarías lógica de rate limiting real
-		c.Next()
-	}
 }
