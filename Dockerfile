@@ -1,5 +1,5 @@
 # Usar imagen oficial de Go como base
-FROM golang:1.21-alpine AS builder
+FROM golang:1.23-alpine AS builder
 
 # Instalar dependencias del sistema
 RUN apk add --no-cache git
@@ -30,6 +30,9 @@ WORKDIR /root/
 
 # Copiar el binario desde la etapa de construcción
 COPY --from=builder /app/main .
+
+# Copiar docs de Swagger
+COPY --from=builder /app/docs ./docs
 
 # Exponer puerto
 EXPOSE 8080
